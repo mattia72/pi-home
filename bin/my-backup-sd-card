@@ -1,0 +1,6 @@
+#!/bin/bash
+
+date=$(date +%Y%m%d)
+img_file="/mnt/usbstorage/backup/raspi/img-$date.gz"
+
+sudo dd if=/dev/mmcblk0 bs=1M | pv | gzip -c > "$img_file"
