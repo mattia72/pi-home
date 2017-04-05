@@ -130,6 +130,8 @@ if [[ $shutdown_before == "" ]]; then
   shutdown_before_ok=1
 else
   current_time=`date +"%H%M"`
+  current_time=${current_time##*0}
+  shutdown_before=${shutdown_before##*0}
   shutdown_before_ok=$(( current_time < shutdown_before ))
 fi
 
