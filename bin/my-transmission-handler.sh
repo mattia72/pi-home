@@ -130,17 +130,21 @@ if [[ $shutdown_before == "" ]]; then
   shutdown_before_ok=1
 else
   current_time=`date +"%H%M"`
-  current_time=${current_time##*0}
-  shutdown_before=${shutdown_before##*0}
-  shutdown_before_ok=$(( current_time < shutdown_before ))
+  #current_time_cut=${current_time##+([0 ])} # doesn't work :(
+  current_time_cut=$(echo $current_time | sed 's/^\s*0*//')
+  shutdown_before_cut=$(echo $shutdown_before | sed 's/^\s*0*//') 
+  shutdown_before_ok=$(( current_time_cut < shutdown_before_cut ))
+  log_everywhere "time: $current_time_cut before: $shutdown_before_cut ok: $shutdown_before_ok"
 fi
 
 TORRENT_ID_LIST=$($BASE_COMMAND -l | sed -e '1d;$d;s/^ *\([0-9]\+\).*$/\1/')
 if [ -z "$TORRENT_ID_LIST" ]; then
   log_everywhere "No active torrent found."
+  log_everywhere "Shutdown: $shutdown_if_no_active_torrent Time before ok: $shutdown_before_ok"
   if [[ $shutdown_if_no_active_torrent == 1 && $shutdown_before_ok == 1 ]]; then
      log_to_file 1 "Shutdown initiated."
-     shutdown -h -t 60 "Shutdown initiated by ${0##*/}. Type 'sudo shutdown -c' to cancel it!" &
+     #shutdown in a minute
+     sudo shutdown -h >> $log_file 2>&1 
   fi
 fi
 
