@@ -6,7 +6,7 @@ movedir=""
 remove_completed=0
 shutdown_if_no_active_torrent=0
 shutdown_before=""
-log_level=-1 # no log
+log_level=0 # no log
 max_seed_hours=48
 max_seed_ratio='1.0'
 log_file=${0}.log
@@ -42,7 +42,7 @@ log_to_file()
   [ $log_level -ge $level ] && echo -e "`date`: $message" >> $log_file
 }
 
-log_everywhere()
+log_to_screen()
 {
   local message="$1"
 
@@ -51,7 +51,7 @@ log_everywhere()
 }
 
 OPTIND=1 
-while getopts ":a:ht:s:rdb:l:m:" opt; do
+while getopts ":a:ht:sr:db:l:m:" opt; do
   #echo opt:$opt $OPTARG
   case "$opt" in
     a) auth=$OPTARG ;;
@@ -67,6 +67,15 @@ while getopts ":a:ht:s:rdb:l:m:" opt; do
   esac
 done
 shift "$((OPTIND-1))" # Shift off the options and optional --.
+
+#echo  "auth                            $auth"
+#echo  "max_seed_hours                  $max_seed_hours"
+#echo  "max_seed_ratio                  $max_seed_ratio"
+#echo  "remove_completed                $remove_completed"
+#echo  "shutdown_if_no_active_torrent   $shutdown_if_no_active_torrent"
+#echo  "shutdown_before                 $shutdown_before"
+#echo  "log_level                       $log_level"
+#echo  "movedir                         $movedir"
 
 set -u
 
@@ -110,22 +119,22 @@ do
   (( seeding_time_reached )) && log_entry="$log_entry (max reached)"
   log_entry="${log_entry}\t$NAME"
 
-  log_everywhere "$log_entry"
+  log_to_screen "$log_entry"
 
   if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" || $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
-    log_everywhere "Torrent #$TORRENT_ID is completed."
+    log_to_screen "Torrent #$TORRENT_ID is completed."
     if [ -n "$movedir" ]; then
-      log_everywhere "Moving downloaded file(s) to $movedir."
+      log_to_screen "Moving downloaded file(s) to $movedir."
       transmission-remote -n $auth -torrent $TORRENT_ID -move $movedir
       log_to_file 1 "$log_entry moved to $movedir"
     fi
-    if [ $remove_completed -eq 1 ]; then
-      log_everywhere "Removing torrent from list."
+    if (( remove_completed )); then
+      log_to_screen "Removing torrent from list."
       transmission-remote -n $auth --torrent $TORRENT_ID --remove
       log_to_file 1 "$log_entry removed"
     fi
   else
-    log_everywhere "Torrent #$TORRENT_ID is NOT completed."
+    log_to_screen "Torrent #$TORRENT_ID is NOT completed."
   fi
 done
 
@@ -151,14 +160,14 @@ fi
 
 TORRENT_ID_LIST=$($BASE_COMMAND -l | sed -e '1d;$d;s/^ *\([0-9]\+\).*$/\1/')
 if [ -z "$TORRENT_ID_LIST" ]; then
-  log_everywhere "No active torrent found."
+  log_to_screen "No active torrent found."
   log_to_file 2 "Shutdown?: $shutdown_if_no_active_torrent Time limit not reached?: $before_time_limit_ok Avoid file exists?: $preventer_file_exists"
 
 
   if (( shutdown_if_no_active_torrent == 1 )); then
 
-    (( preventer_file_exists == 1 )) && log_everywhere "Shutdown canceled by file: `dirname "$0"`/$prevent_shutdown_file_name"  
-    (( before_time_limit_ok == 0 )) && log_everywhere "Shutdown canceled by time limit."
+    (( preventer_file_exists == 1 )) && log_to_screen "Shutdown canceled by file: `dirname "$0"`/$prevent_shutdown_file_name"  
+    (( before_time_limit_ok == 0 )) && log_to_screen "Shutdown canceled by time limit."
 
     if (( before_time_limit_ok == 1 && preventer_file_exists != 1 )); then
      log_to_file 1 "Shutdown initiated."
