@@ -10,6 +10,7 @@ log_level=-1 # no log
 max_seed_hours=48
 max_seed_ratio='1.0'
 log_file=${0}.log
+prevent_shutdown_file_name="PREVENT_SHUTDOWN"
 
 usage()
 {
@@ -24,7 +25,8 @@ usage()
   echo -e "     -s <num>   Max seeding ratio. Default: $max_seed_ratio" 
   echo -e "     -r         Remove completed torrents."
   echo -e "                (State: Stopped or Finished or seeding ratio or time reached)" 
-  echo -e "     -d         Shutdown if there is no active torrent" 
+  echo -e "     -d         Shutdown if there is no active torrent. " 
+  echo -e "                Shutdown can be prevented by creating a file, named $prevent_shutdown_file_name" 
   echo -e "     -b <hhmm>  Shutdown only before specified time. Format: hhmm, eg: `date +"%H%M"`" 
   echo -e "     -m <dir>   Move completed torrents to the specified directory" 
   echo -e "     -l <num>   Log level (0: no log; 1: log on remove and shutdown; 2: all)"
@@ -102,7 +104,8 @@ do
 
   log_entry="$TORRENT_ID - $STATE\tUp/Total: $UPLOADED/$TOTAL_SIZE\tRatio: $RATIO"
   (( seeding_ratio_reached )) && log_entry="$log_entry (max reached)"
-  log_entry="${log_entry}\tSeedTime: ${SEEDING_TIME_DAYS}d+${SEEDING_TIME_HOURS}h=${time}h"
+  #log_entry="${log_entry}\tSeedTime: ${SEEDING_TIME_DAYS}d+${SEEDING_TIME_HOURS}h=${time}h"
+  log_entry="${log_entry}\tSeedTime: ${time}h"
   (( seeding_time_reached )) && log_entry="$log_entry (max reached)"
   log_entry="${log_entry}\t$NAME"
 
@@ -126,25 +129,36 @@ do
 done
 
 
+[ ! -e "`dirname "$0"`/$prevent_shutdown_file_name" ] 
+avoid_file_exists=$?
+
 if [[ $shutdown_before == "" ]]; then
-  shutdown_before_ok=1
+  before_time_limit_ok=1
 else
   current_time=`date +"%H%M"`
   #current_time_cut=${current_time##+([0 ])} # doesn't work :(
   current_time_cut=$(echo $current_time | sed 's/^\s*0*//')
   shutdown_before_cut=$(echo $shutdown_before | sed 's/^\s*0*//') 
-  shutdown_before_ok=$(( current_time_cut < shutdown_before_cut ))
-  log_everywhere "time: $current_time_cut before: $shutdown_before_cut ok: $shutdown_before_ok"
+  before_time_limit_ok=$(( current_time_cut < shutdown_before_cut ))
+  log_to_file 2 "time: $current_time_cut limit: $shutdown_before_cut ok: $before_time_limit_ok"
 fi
 
 TORRENT_ID_LIST=$($BASE_COMMAND -l | sed -e '1d;$d;s/^ *\([0-9]\+\).*$/\1/')
 if [ -z "$TORRENT_ID_LIST" ]; then
   log_everywhere "No active torrent found."
-  log_everywhere "Shutdown: $shutdown_if_no_active_torrent Time before ok: $shutdown_before_ok"
-  if [[ $shutdown_if_no_active_torrent == 1 && $shutdown_before_ok == 1 ]]; then
+  log_to_file 2 "Shutdown?: $shutdown_if_no_active_torrent Time limit not reached?: $before_time_limit_ok Avoid file exists?: $avoid_file_exists"
+
+
+  if (( shutdown_if_no_active_torrent == 1 )); then
+
+    (( avoid_file_exists == 1 )) && log_everywhere "Shutdown canceled by file: `dirname "$0"`/$prevent_shutdown_file_name"  
+    (( before_time_limit_ok == 0 )) && log_everywhere "Shutdown canceled by time limit."
+
+    if (( before_time_limit_ok == 1 && avoid_file_exists != 1 )); then
      log_to_file 1 "Shutdown initiated."
      #shutdown in a minute
      sudo shutdown -h >> $log_file 2>&1 
+    fi
   fi
 fi
 
