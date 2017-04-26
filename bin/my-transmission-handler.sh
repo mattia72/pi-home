@@ -121,7 +121,8 @@ do
 
   log_to_screen "$log_entry"
 
-  if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" || $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
+  #if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" || $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
+  if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" ) && ( $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
     log_to_screen "Torrent #$TORRENT_ID is completed."
     if [ -n "$movedir" ]; then
       log_to_screen "Moving downloaded file(s) to $movedir."

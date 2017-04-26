@@ -36,7 +36,7 @@ Human2Byte()
     result=""
   fi
 
-  local num="${human%*[ KMG]*B}"
+  local num="${human%*[ kKMG]*B}"
   local unit="${human##*[0-9 ]}"
   hash bc /dev/null 2>&1 
   local bc_nok=$?
@@ -52,7 +52,7 @@ Human2Byte()
   esac
 
   case "$unit" in
-    KB)
+    [Kk]B)
       if (( bc_nok )); then
         result=$((num*1024)) 
       else
