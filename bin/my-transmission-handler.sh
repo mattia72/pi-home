@@ -1,7 +1,8 @@
 #!/bin/bash
 #set -x
 
-auth=transmission:transmission
+script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+auth=user:password
 movedir=""
 remove_completed=0
 shutdown_if_no_active_torrent=0
@@ -11,10 +12,12 @@ max_seed_hours=48
 max_seed_ratio='1.0'
 log_file=${0}.log
 prevent_shutdown_file_name="PREVENT_SHUTDOWN"
+ifttt_key_file_name="IFTTT_SECRET_KEY"
+min_time_between_notifications=120
 
 usage()
 {
-  echo -e "Usage: ${0##*/} [-h] -a <un:pw> [-r] [-d [-b <hhmm>]] [-s <num>] [-m <dir>] [-l <num>]" 
+  echo -e "Usage: ${0##*/} [-h] -a <un:pw> [-r] [-d [-b <hhmm>]] [-s <num>] [-m <dir>] [-l <num>] [-i <file>] [-n <num>] [-l <file>] [-v <num>]" 
   echo  
   echo -e "Without any option, it prints the status of the active torrents." 
   echo  
@@ -30,7 +33,10 @@ usage()
   echo -e "                It will prevent the shutdown on the day of creation." 
   echo -e "     -b <hhmm>  Shutdown only before specified time. Format: hhmm, eg: `date +"%H%M"`" 
   echo -e "     -m <dir>   Move completed torrents to the specified directory" 
-  echo -e "     -l <num>   Log level (0: no log; 1: log on remove and shutdown; 2: all)"
+  echo -e "     -i <file>  This file in script directory contains IFTTT key for notifications. Default: $ifttt_key_file_name" 
+  echo -e "     -n <num>   Time between notifications should be minimum <num> minutes. Default: $min_time_between_notifications"
+  echo -e "     -l <file>  Log file"
+  echo -e "     -v <num>   Log level (0: no log; 1: log on remove and shutdown; 2: all)"
   echo  
 }
 
@@ -45,13 +51,44 @@ log_to_file()
 log_to_screen()
 {
   local message="$1"
+  local level=2
+  if [ $# -gt 1 ]; then
+    level="$1"
+    message="$2"
+  fi
 
   echo -e "$message" 
-  log_to_file 2 "$message"
+  log_to_file $level "$message"
+}
+
+force_notify()
+{
+  local event="$1"
+  local par1="${2:-}"
+  local par2="${3:-}"
+  local par3="${4:-}"
+
+  bash $script_dir/my-send-notification.sh -e "$event" \
+  -1 "$par1" -2 "$par2" -3 "$par3" \
+  -i "$ifttt_key_file_name" \
+  -l "$log_file" -v "$log_level" -n "$min_time_between_notifications"
+}
+
+notify()
+{
+  local event="$1"
+  local par1="${2:-}"
+  local par2="${3:-}"
+  local par3="${4:-}"
+
+  bash $script_dir/my-send-notification.sh -e "$event" \
+  -1 "$par1" -2 "$par2" -3 "$par3" \
+  -i "$ifttt_key_file_name" \
+  -l "$log_file" -v "$log_level" -n "$min_time_between_notifications"
 }
 
 OPTIND=1 
-while getopts ":a:ht:sr:db:l:m:" opt; do
+while getopts ":a:ht:sr:db:l:v:m:n:i:" opt; do
   #echo opt:$opt $OPTARG
   case "$opt" in
     a) auth=$OPTARG ;;
@@ -60,13 +97,21 @@ while getopts ":a:ht:sr:db:l:m:" opt; do
     d) remove_completed=1 ;;
     s) shutdown_if_no_active_torrent=1 ;;
     b) shutdown_before=$OPTARG ;;
-    l) log_level=$OPTARG ;; 
+    v) log_level=$OPTARG ;; 
+    l) log_file=$OPTARG ;; 
+    n) min_time_between_notifications=$OPTARG ;; 
+    i) ifttt_key_file_name=$OPTARG ;; 
     m) movedir=$OPTARG ;; 
     h) usage; exit 0 ;;
     ?) echo -e "Error: invalid option - $OPTARG";exit 1 ;;
   esac
 done
 shift "$((OPTIND-1))" # Shift off the options and optional --.
+
+if [ "$auth" = 'user:password' ]; then
+  log_to_screen 1 "Option -a <user:password> is mandatory." >&2 
+  exit 1; 
+fi
 
 #echo  "auth                            $auth"
 #echo  "max_seed_hours                  $max_seed_hours"
@@ -84,6 +129,7 @@ source "${0%/*}/my-calculator.lib.sh"
 BASE_COMMAND="transmission-remote -n $auth"
 TORRENT_ID_LIST=$($BASE_COMMAND -l | sed -e '1d;$d;s/^ *\([0-9]\+\).*$/\1/')
 
+notify_entry=""
 for TORRENT_ID in $TORRENT_ID_LIST
 do
   CMD_OUT=$($BASE_COMMAND -t $TORRENT_ID -i)
@@ -94,7 +140,7 @@ do
   RATIO=$(echo -e "$CMD_OUT" | grep -i "Ratio:" | sed 's/^ *//' | cut -d ' ' -f 2)
 
   SEEDING_TIME_DAYS=$(echo -e "$CMD_OUT" |  sed -n '/Seeding Time/s/^.\+\?:[ \t]*\([0-9]\+\) day.\?.*$/\1/p' )
-  SEEDING_TIME_HOURS=$(echo -e "$CMD_OUT" |  sed -n '/Seeding Time/s/^.\+\?:[ \t]*\([0-9]\+\) hour.\?.*$/\1/p' )
+  SEEDING_TIME_HOURS=$(echo -e "$CMD_OUT" |  sed -n '/Seeding Time/s/^.\+\?:[ \t]*\(.*, \)\?\([0-9]\+\) hour.\?.*$/\2/p' )
 
   TOTAL_SIZE=$(echo -e "$CMD_OUT" | sed -n '/Total size/s/^.*: *\([0-9.]\+ [a-zA-Z]\+\) .*$/\1/p' ) 
   UPLOADED=$(echo -e "$CMD_OUT" | sed -n '/Uploaded:/s/^.*: *\([0-9.]\+ [a-zA-Z]\+\).*$/\1/p' ) 
@@ -112,7 +158,7 @@ do
   BcCalc "$time > ${max_seed_hours}" seeding_time_reached
   BcCalc "${up_bytes%*B} > ${total_bytes%*B}*${max_seed_ratio}" seeding_ratio_reached
 
-  log_entry="$TORRENT_ID - $STATE\tUp/Total: $UPLOADED/$TOTAL_SIZE\tRatio: $RATIO"
+  log_entry="Id:$TORRENT_ID - '$STATE'\tUp/Total: $UPLOADED/$TOTAL_SIZE\tRatio: $RATIO"
   (( seeding_ratio_reached )) && log_entry="$log_entry (max reached)"
   #log_entry="${log_entry}\tSeedTime: ${SEEDING_TIME_DAYS}d+${SEEDING_TIME_HOURS}h=${time}h"
   log_entry="${log_entry}\tSeedTime: ${time}h"
@@ -120,6 +166,7 @@ do
   log_entry="${log_entry}\t$NAME"
 
   log_to_screen "$log_entry"
+  notify_entry="$notify_entry\n$log_entry"
 
   #if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" || $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
   if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" ) && ( $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
@@ -140,13 +187,12 @@ do
 done
 
 
-current_dir=`dirname "$0"`
-#[ ! -e "$current_dir/$prevent_shutdown_file_name" ] 
-#preventer_file_exists=$?
-#echo "P1:$preventer_file_exists"
-[ -z "$(find "$current_dir" -mtime -1 -name "$prevent_shutdown_file_name")" ]
-preventer_file_exists=$?
-#echo "P2:$preventer_file_exists"
+#[ ! -e "$script_dir/$prevent_shutdown_file_name" ] 
+#shutdown_preventer_file_exists=$?
+#echo "P1:$shutdown_preventer_file_exists"
+[ -z "$(find "$script_dir" -mtime -1 -name "$prevent_shutdown_file_name")" ]
+shutdown_preventer_file_exists=$?
+#echo "P2:$shutdown_preventer_file_exists"
 
 if [[ $shutdown_before == "" ]]; then
   before_time_limit_ok=1
@@ -162,19 +208,27 @@ fi
 TORRENT_ID_LIST=$($BASE_COMMAND -l | sed -e '1d;$d;s/^ *\([0-9]\+\).*$/\1/')
 if [ -z "$TORRENT_ID_LIST" ]; then
   log_to_screen "No active torrent found."
-  log_to_file 2 "Shutdown?: $shutdown_if_no_active_torrent Time limit not reached?: $before_time_limit_ok Avoid file exists?: $preventer_file_exists"
+  #send notifictaion to my phone
+  force_notify "no_active_torrent"
+  echo
+
+  log_to_file 2 "Shutdown?: $shutdown_if_no_active_torrent Time limit not reached?: $before_time_limit_ok Avoid file exists?: $shutdown_preventer_file_exists"
 
 
   if (( shutdown_if_no_active_torrent == 1 )); then
 
-    (( preventer_file_exists == 1 )) && log_to_screen "Shutdown canceled by file: `dirname "$0"`/$prevent_shutdown_file_name"  
+    (( shutdown_preventer_file_exists == 1 )) && log_to_screen "Shutdown canceled by file: `dirname "$0"`/$prevent_shutdown_file_name"  
     (( before_time_limit_ok == 0 )) && log_to_screen "Shutdown canceled by time limit."
 
-    if (( before_time_limit_ok == 1 && preventer_file_exists != 1 )); then
+    if (( before_time_limit_ok == 1 && shutdown_preventer_file_exists != 1 )); then
      log_to_file 1 "Shutdown initiated."
      #shutdown in a minute
+     force_notify "raspi_shutdown_started"
      sudo shutdown -h >> $log_file 2>&1 
     fi
   fi
+else
+  notify "get_torrent_info" "$notify_entry"
+  echo
 fi
 
