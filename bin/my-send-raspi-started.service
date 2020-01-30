@@ -11,14 +11,17 @@
 #
 [Unit]
 Description=Send raspi_started Notification Service
-Wants=network-online.target
-After=network-online.target
+#Wants=network-online.target
+#After=network-online.target
+After=network.target
 
 [Service]
-Type=simple
+Type=oneshot
 User=pi
 WorkingDirectory=/home/pi/bin
 ExecStart=/home/pi/bin/my-send-notification.sh -f -e raspi_started
+TimeoutSec=30
+RemainAfterExit=no
 
 [Install]
 WantedBy=multi-user.target

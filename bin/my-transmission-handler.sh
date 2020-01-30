@@ -149,19 +149,28 @@ do
   [ -z "$SEEDING_TIME_DAYS" ] &&  SEEDING_TIME_DAYS=0 
   [ -z "$SEEDING_TIME_HOURS" ] &&  SEEDING_TIME_HOURS=0 
   SEEDING_DAYS_IN_HOURS=$(( 24*SEEDING_TIME_DAYS ))
-  time=$(( SEEDING_DAYS_IN_HOURS + SEEDING_TIME_HOURS ))
+  all_seed_time=$(( SEEDING_DAYS_IN_HOURS + SEEDING_TIME_HOURS ))
 
   #echo u:$UPLOADED/$TOTAL_SIZE
   Human2Byte "$UPLOADED" up_bytes
   Human2Byte "$TOTAL_SIZE" total_bytes
 
-  BcCalc "$time > ${max_seed_hours}" seeding_time_reached
   BcCalc "${up_bytes%*B} > ${total_bytes%*B}*${max_seed_ratio}" seeding_ratio_reached
+  #Hátravan=(1-arány)*(48+0.4*letöltött adatmennyiség)-seedben töltött idő
+
+  exp="(1-${RATIO})*(48+0.4*(${total_bytes%*B}/(1024^3)))-${all_seed_time}" 
+#  echo "$exp"
+  BcCalc "$exp" required_seed_time
+  exp="define min(x,y){if(x<y){return(x)};return(y)} min($required_seed_time, $max_seed_hours)" 
+#  echo "$exp"
+  BcCalc "$exp" required_seed_time
+  BcCalc "($all_seed_time > ${max_seed_hours}) || ($required_seed_time < 0)" seeding_time_reached
 
   log_entry="Id:$TORRENT_ID - '$STATE'\tUp/Total: $UPLOADED/$TOTAL_SIZE\tRatio: $RATIO"
   (( seeding_ratio_reached )) && log_entry="$log_entry (max reached)"
-  #log_entry="${log_entry}\tSeedTime: ${SEEDING_TIME_DAYS}d+${SEEDING_TIME_HOURS}h=${time}h"
-  log_entry="${log_entry}\tSeedTime: ${time}h"
+  #log_entry="${log_entry}\tSeedTime: ${SEEDING_TIME_DAYS}d+${SEEDING_TIME_HOURS}h=${all_seed_time}h"
+  log_entry="${log_entry}\tSeedTime: ${all_seed_time}h"
+  log_entry="${log_entry}\tRest: ${required_seed_time}h"
   (( seeding_time_reached )) && log_entry="$log_entry (max reached)"
   log_entry="${log_entry}\t$NAME"
 

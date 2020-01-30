@@ -12,19 +12,22 @@ log_level=-1 # no log, 1:error, 2:warning, 3:info
 
 usage()
 {
-  echo -e "Usage: ${0##*/} [-h] -e <event> [-f] [-i <file>] [-n <num>] [-l <file>] [-v <num>]" 
-  echo  
-  echo -e "Without any option, it prints the status of the active torrents." 
-  echo  
-  echo -e "Options:" 
-  echo -e "     -h         Help" 
-  echo -e "     -f         Force sending notification"
-  echo -e "     -e <event> Notification event"
-  echo -e "     -i <file>  This file in script directory contains IFTTT key for notifications. Default: $ifttt_key_file_name" 
-  echo -e "     -l <file>  Log file"
-  echo -e "     -v <num>   Log level (0: no log; 1: error; 2: warning; 3: info)"
-  echo -e "     -n <num>   Time between notifications should be minimum <num> minutes. Default: $min_time_between_notifications"
-  echo  
+  cat <<END_USAGE
+  Usage: ${0##*/} [-h] -e <event> [-f] [-i <file>] [-n <num>] [-l <file>] [-v <num>]
+
+  Sends POST web request to
+  https://maker.ifttt.com/trigger/<event>/with/key/<key>
+
+  Options:
+       -h         Display this help and exit
+       -f         Force sending notification
+       -e <event> Notification event name
+       -i <file>  This file in script directory contains IFTTT key for notifications. Default: $ifttt_key_file_name
+       -l <file>  Log file. Default $log_file
+       -v <num>   Log level (0: no log; 1: error; 2: warning; 3: info)
+       -n <num>   Time between notifications should be minimum <num> minutes. Default: $min_time_between_notifications
+
+END_USAGE
 }
 
 log_to_file()
@@ -103,7 +106,12 @@ if [ -z $event ]; then
   exit 1; 
 fi
 
-ifttt_key=$(cat "$script_dir/$ifttt_key_file_name")
+if [ -e "$script_dir/$ifttt_key_file_name" ]; then
+  ifttt_key=$(cat "$script_dir/$ifttt_key_file_name")
+else
+  log_to_screen 1 "$ifttt_key_file_name not exists." >&2 
+  exit 1; 
+fi
 
 [ -z "$(find "$script_dir" -mmin "-$min_time_between_notifications" -name "$prevent_notification_file_name")" ]
 notification_preventer_file_exists=$?
