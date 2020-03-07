@@ -8,8 +8,8 @@ remove_completed=0
 shutdown_if_no_active_torrent=0
 shutdown_before=""
 log_level=0 # no log
-max_seed_hours=48
-max_seed_ratio='1.0'
+max_seed_hours=52 #48 + 10%
+max_seed_ratio=10 # not reliable enough so keep it high!
 log_file=${0}.log
 prevent_shutdown_file_name="PREVENT_SHUTDOWN"
 ifttt_key_file_name="IFTTT_SECRET_KEY"
@@ -17,49 +17,36 @@ min_time_between_notifications=120
 
 usage()
 {
-  echo -e "Usage: ${0##*/} [-h] -a <un:pw> [-r] [-d [-b <hhmm>]] [-s <num>] [-m <dir>] [-l <num>] [-i <file>] [-n <num>] [-l <file>] [-v <num>]" 
-  echo  
-  echo -e "Without any option, it prints the status of the active torrents." 
-  echo  
-  echo -e "Options:" 
-  echo -e "     -h         Help" 
-  echo -e "     -a <un:pw> Authentication <user:password>" 
-  echo -e "     -t <num>   Max seeding hours. Default: $max_seed_hours" 
-  echo -e "     -r <num>   Max seeding ratio. Default: $max_seed_ratio" 
-  echo -e "     -d         Delete completed torrents from the list."
-  echo -e "                (completed: Stopped or Finished or seeding ratio or time reached)" 
-  echo -e "     -s         Shutdown if there is no active torrent. " 
-  echo -e "                Shutdown can be prevented by creating a file, named $prevent_shutdown_file_name." 
-  echo -e "                It will prevent the shutdown on the day of creation." 
-  echo -e "     -b <hhmm>  Shutdown only before specified time. Format: hhmm, eg: `date +"%H%M"`" 
-  echo -e "     -m <dir>   Move completed torrents to the specified directory" 
-  echo -e "     -i <file>  This file in script directory contains IFTTT key for notifications. Default: $ifttt_key_file_name" 
-  echo -e "     -n <num>   Time between notifications should be minimum <num> minutes. Default: $min_time_between_notifications"
-  echo -e "     -l <file>  Log file"
-  echo -e "     -v <num>   Log level (0: no log; 1: log on remove and shutdown; 2: all)"
-  echo  
+  cat <<END_USAGE
+  Usage:
+
+  ${0##*/}  
+  [-h] -a <un:pw> [-r <num>] [-d [-b <hhmm>]] [-s <num>] [-m <dir>] 
+  [-l <num>] [-i <file>] [-n <num>] [-l <file>] [-v <num>]
+
+  Without any option, it prints the status of the active torrents.
+
+  Options:
+       -h         Display this help and exit
+       -a <un:pw> Authentication <user:password>
+       -t <num>   Max seeding hours. Default: $max_seed_hours
+       -r <num>   Max seeding ratio. Default: $max_seed_ratio
+       -d         Delete completed torrents from the list.
+                  (completed: Stopped or Finished and seeding ratio or time reached)
+       -s         Shutdown if there is no active torrent. 
+                  Shutdown can be prevented by creating a file, named $prevent_shutdown_file_name.
+                  It will prevent the shutdown on the day of creation.
+       -b <hhmm>  Shutdown only before specified time. Format: hhmm, eg: `date +"%H%M"`
+       -m <dir>   Move completed torrents to the specified directory
+       -i <file>  This file in script directory contains IFTTT key for notifications. Default: $ifttt_key_file_name
+       -n <num>   Time between notifications should be minimum <num> minutes. Default: $min_time_between_notifications
+       -l <file>  Log file
+       -v <num>   Log level (0: no log; 1: log on remove and shutdown; 2: all)
+
+END_USAGE
 }
 
-log_to_file()
-{
-  local level="$1"
-  local message="$2"
-
-  [ $log_level -ge $level ] && echo -e "`date`: $message" >> $log_file
-}
-
-log_to_screen()
-{
-  local message="$1"
-  local level=2
-  if [ $# -gt 1 ]; then
-    level="$1"
-    message="$2"
-  fi
-
-  echo -e "$message" 
-  log_to_file $level "$message"
-}
+source "${0%/*}/my-logger.lib.sh"
 
 force_notify()
 {
@@ -92,16 +79,16 @@ while getopts ":a:ht:sr:db:l:v:m:n:i:" opt; do
   #echo opt:$opt $OPTARG
   case "$opt" in
     a) auth=$OPTARG ;;
-    t) max_seed_hours=$OPTARG ;;
-    r) max_seed_ratio=$OPTARG ;;
-    d) remove_completed=1 ;;
-    s) shutdown_if_no_active_torrent=1 ;;
     b) shutdown_before=$OPTARG ;;
-    v) log_level=$OPTARG ;; 
-    l) log_file=$OPTARG ;; 
-    n) min_time_between_notifications=$OPTARG ;; 
+    d) remove_completed=1 ;;
     i) ifttt_key_file_name=$OPTARG ;; 
+    l) log_file=$OPTARG ;; 
     m) movedir=$OPTARG ;; 
+    n) min_time_between_notifications=$OPTARG ;; 
+    r) max_seed_ratio=$OPTARG ;;
+    s) shutdown_if_no_active_torrent=1 ;;
+    t) max_seed_hours=$OPTARG ;;
+    v) log_level=$OPTARG ;; 
     h) usage; exit 0 ;;
     ?) echo -e "Error: invalid option - $OPTARG";exit 1 ;;
   esac
@@ -113,14 +100,14 @@ if [ "$auth" = 'user:password' ]; then
   exit 1; 
 fi
 
-#echo  "auth                            $auth"
-#echo  "max_seed_hours                  $max_seed_hours"
-#echo  "max_seed_ratio                  $max_seed_ratio"
-#echo  "remove_completed                $remove_completed"
-#echo  "shutdown_if_no_active_torrent   $shutdown_if_no_active_torrent"
-#echo  "shutdown_before                 $shutdown_before"
-#echo  "log_level                       $log_level"
-#echo  "movedir                         $movedir"
+log_to_screen 3 "auth                           : $auth"
+log_to_screen 3 "max_seed_hours                 : $max_seed_hours"
+log_to_screen 3 "max_seed_ratio                 : $max_seed_ratio"
+log_to_screen 3 "remove_completed               : $remove_completed"
+log_to_screen 3 "shutdown_if_no_active_torrent  : $shutdown_if_no_active_torrent"
+log_to_screen 3 "shutdown_before                : $shutdown_before"
+log_to_screen 3 "log_level                      : $log_level"
+log_to_screen 3 "movedir                        : $movedir"
 
 set -u
 
@@ -156,9 +143,9 @@ do
   Human2Byte "$TOTAL_SIZE" total_bytes
 
   BcCalc "${up_bytes%*B} > ${total_bytes%*B}*${max_seed_ratio}" seeding_ratio_reached
-  #Hátravan=(1-arány)*(48+0.4*letöltött adatmennyiség)-seedben töltött idő
 
-  exp="(1-${RATIO})*(48+0.4*(${total_bytes%*B}/(1024^3)))-${all_seed_time}" 
+  #Hátravan=(1-arány)*(48+0.4*letöltött adatmennyiség)-seedben töltött idő
+  exp="(1-${RATIO})*($max_seed_hours + 0.4*(${total_bytes%*B}/(1024^3)))-${all_seed_time}" 
 #  echo "$exp"
   BcCalc "$exp" required_seed_time
   exp="define min(x,y){if(x<y){return(x)};return(y)} min($required_seed_time, $max_seed_hours)" 
@@ -176,8 +163,7 @@ do
 
   log_to_screen "$log_entry"
   notify_entry="$notify_entry\n$log_entry"
-
-  #if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" || $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
+  completed=0
   if [[ "$PERCENT" = "100%" && ( "$STATE" = "Stopped" || "$STATE" = "Finished" ) && ( $seeding_time_reached == 1 || $seeding_ratio_reached == 1 ) ]]; then
     log_to_screen "Torrent #$TORRENT_ID is completed."
     if [ -n "$movedir" ]; then
@@ -186,13 +172,23 @@ do
       log_to_file 1 "$log_entry moved to $movedir"
     fi
     if (( remove_completed )); then
-      log_to_screen "Removing torrent from list."
+      log_to_screen 1 "Removing torrent from list."
       transmission-remote -n $auth --torrent $TORRENT_ID --remove
       log_to_file 1 "$log_entry removed"
     fi
+    completed=1
   else
     log_to_screen "Torrent #$TORRENT_ID is NOT completed."
+    completed=0
   fi
+
+  log_level_tmp=$log_level
+  if (( completed && remove_completed )); then log_level=3; fi
+  log_to_screen 3 "completed: $completed"
+  log_to_screen 3 "Percent: $PERCENT"
+  log_to_screen 3 "SeedingTimeReached?: $seeding_time_reached"
+  log_to_screen 3 "SeedingRatioReached?: $seeding_ratio_reached"
+  if (( completed && remove_completed )); then log_level=$log_level_tmp; fi
 done
 
 

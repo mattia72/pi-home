@@ -8,7 +8,7 @@ min_time_between_notifications=120
 force_sending=0
 log_file="${0}.log"
 
-log_level=-1 # no log, 1:error, 2:warning, 3:info
+log_level=1 # no log, 1:error, 2:warning, 3:info
 
 usage()
 {
@@ -30,26 +30,7 @@ usage()
 END_USAGE
 }
 
-log_to_file()
-{
-  local level="$1"
-  local message="$2"
-
-  [ $log_level -ge $level ] && echo -e "`date`: $message" >> $log_file
-}
-
-log_to_screen()
-{
-  local message="$1"
-  local level=3 #info
-  if [ $# -gt 1 ]; then
-    level="$1"
-    message="$2"
-  fi
-
-  [ $log_level -ge $level ] && echo -e "$message" 
-  log_to_file $level "$message"
-}
+source "${0%/*}/my-logger.lib.sh"
 
 notify()
 {
@@ -77,7 +58,10 @@ notify()
       touch "$script_dir/$prevent_notification_file_name"
     fi
   else
-      log_to_screen 3 "Notification sending prevented by file."
+      prev_file_time=$(stat -c %Y  "$script_dir/$prevent_notification_file_name")
+      now=$(date +%s)
+      BcCalc "$min_time_between_notifications - ($now - $prev_file_time)/60" mins
+      log_to_screen 3 "Notification sending prevented for $mins min(s)."
   fi
 }
 
@@ -121,5 +105,10 @@ if [ $force_sending -eq 1 ]; then
   log_to_screen 3 "Force sending $event notification."
 fi
 
+source "${0%/*}/my-calculator.lib.sh"
+
 notify "$event" "$p1" "$p2" "$p3"
+if [ "$event" = "raspi_started" ]; then
+  log_to_file 0 "$(/bin/ip addr)"
+fi
 

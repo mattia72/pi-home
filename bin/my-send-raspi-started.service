@@ -6,21 +6,22 @@
 # sudo systemctl start my-send-raspi-started.service
 #
 # On change:
+# sudo cp my-send-raspi-started.service /etc/systemd/system 
 # sudo systemctl daemon-reload
 # sudo systemctl start my-send-raspi-started.service
 #
 [Unit]
 Description=Send raspi_started Notification Service
-#Wants=network-online.target
-#After=network-online.target
-After=network.target
+Wants=network-online.target
+After=networ-online.target
+#After=network.target
 
 [Service]
 Type=oneshot
 User=pi
 WorkingDirectory=/home/pi/bin
-ExecStart=/home/pi/bin/my-send-notification.sh -f -e raspi_started
-TimeoutSec=30
+ExecStart=/home/pi/bin/my-send-notification.sh -f -e raspi_started -v 1
+TimeoutSec=60
 RemainAfterExit=no
 
 [Install]
