@@ -1,7 +1,7 @@
 #!/bin/bash
 #set -x
 
-auth=transmission:transmission
+auth=mata:transmission
 movedir=""
 remove_completed=0
 shutdown_if_no_active_torrent=0
@@ -11,10 +11,11 @@ max_seed_hours=48
 max_seed_ratio='1.0'
 log_file=${0}.log
 prevent_shutdown_file_name="PREVENT_SHUTDOWN"
+script_name=${0##*/} 
 
 usage()
 {
-  echo -e "Usage: ${0##*/} [-h] -a <un:pw> [-r] [-d [-b <hhmm>]] [-s <num>] [-m <dir>] [-l <num>]" 
+  echo -e "Usage: $script_name= [-h] -a <un:pw> [-r] [-d [-b <hhmm>]] [-s <num>] [-m <dir>] [-l <num>]" 
   echo  
   echo -e "Without any option, it prints the status of the active torrents." 
   echo  
@@ -112,7 +113,7 @@ do
   BcCalc "$time > ${max_seed_hours}" seeding_time_reached
   BcCalc "${up_bytes%*B} > ${total_bytes%*B}*${max_seed_ratio}" seeding_ratio_reached
 
-  log_entry="$TORRENT_ID - $STATE\tUp/Total: $UPLOADED/$TOTAL_SIZE\tRatio: $RATIO"
+  log_entry="Id:$TORRENT_ID - '$STATE'\tUp/Total: $UPLOADED/$TOTAL_SIZE\tRatio: $RATIO"
   (( seeding_ratio_reached )) && log_entry="$log_entry (max reached)"
   #log_entry="${log_entry}\tSeedTime: ${SEEDING_TIME_DAYS}d+${SEEDING_TIME_HOURS}h=${time}h"
   log_entry="${log_entry}\tSeedTime: ${time}h"
@@ -173,7 +174,7 @@ if [ -z "$TORRENT_ID_LIST" ]; then
     if (( before_time_limit_ok == 1 && preventer_file_exists != 1 )); then
      log_to_file 1 "Shutdown initiated."
      #shutdown in a minute
-     sudo shutdown -h >> $log_file 2>&1 
+     sudo shutdown 1 "Shutdown initiated by $script_name. You can prevent it by: shutdown -c; touch $current_dir/$prevent_shutdown_file_name" >> $log_file 2>&1 
     fi
   fi
 fi

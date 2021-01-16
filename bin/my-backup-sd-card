@@ -1,6 +1,36 @@
 #!/bin/bash
 
+echo "Prevent Shutdown by touching file:"
+touch PREVENT_SHUTDOWN
+ls -la PREVENT_SHUTDOWN
+
+read -p "Du you want to check big packages? [Y/n]" -n 1 -r
+echo    # (optional) move to a new line
+if [[ $REPLY =~ ^[Yy]$ || $REPLY == "" ]]
+then
+dpkg-query -Wf '${Installed-Size}\t${Package}\t${Priority}\n' | egrep '\s(optional|extra)' | cut -f 1,2 | sort -nr | less
+fi
+
+echo "Clean packages..."
+sudo apt-get clean
+sudo apt-get autoremove
+
+echo "Write large dummy zero file..."
+echo "Press Enter to continue, or Ctrl+C to exit."
+read
+echo "Starting write file at $(date)"
+pv -tpreb /dev/zero | dd of=delete_me 
+echo "Done at writing $(date)"
+sync
+echo "Delete dummy file "
+rm -f delete_me
+sync
+
 date=$(date +%Y%m%d)
 img_file="/mnt/usbstorage/backup/raspi/img-$date.gz"
+echo "Creating $img_file ..."
+echo
+echo "Press Enter to continue, or Ctrl+C to exit."
+read
 
 sudo dd if=/dev/mmcblk0 bs=1M | pv | gzip -c > "$img_file"
