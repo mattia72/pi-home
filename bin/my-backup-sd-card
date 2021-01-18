@@ -1,30 +1,64 @@
 #!/bin/bash
 
+test_run=0
+usage()
+{
+  echo -e "Usage: ${0##*/} [-h] [-t] " 
+  echo  
+  echo -e "Without any option, it creates a backup of the sd card." 
+  echo  
+  echo -e "Options:" 
+  echo -e "     -h         Help" 
+  echo -e "     -t         Test run" 
+  echo  
+}
+
+OPTIND=1 
+while getopts ":ht" opt; do
+  #echo opt:$opt $OPTARG
+  case "$opt" in
+    t) test_run=1 ;;
+    h) usage; exit 0 ;;
+    ?) echo -e "Error: invalid option - $OPTARG";exit 1 ;;
+  esac
+done
+shift "$((OPTIND-1))" # Shift off the options and optional --.
+
 echo "Prevent Shutdown by touching file:"
+
+tmpModTime="$(stat -c %y PREVENT_SHUTDOWN)" 
+
 touch PREVENT_SHUTDOWN
 ls -la PREVENT_SHUTDOWN
 
-read -p "Du you want to check big packages? [Y/n]" -n 1 -r
+read -p "Du you want to check big packages? [y/N]" -n 1 -r
 echo    # (optional) move to a new line
-if [[ $REPLY =~ ^[Yy]$ || $REPLY == "" ]]
+if [[ $REPLY =~ ^[Yy]$ ]]
 then
-dpkg-query -Wf '${Installed-Size}\t${Package}\t${Priority}\n' | egrep '\s(optional|extra)' | cut -f 1,2 | sort -nr | less
+    if (( test_run == 0 )); then
+    dpkg-query -Wf '${Installed-Size}\t${Package}\t${Priority}\n' | egrep '\s(optional|extra)' | cut -f 1,2 | sort -nr | less
+    fi
 fi
 
 echo "Clean packages..."
+if (( test_run == 0 )); then
 sudo apt-get clean
 sudo apt-get autoremove
+fi
 
 echo "Write large dummy zero file..."
 echo "Press Enter to continue, or Ctrl+C to exit."
 read
 echo "Starting write file at $(date)"
-pv -tpreb /dev/zero | dd of=delete_me 
-echo "Done at writing $(date)"
-sync
-echo "Delete dummy file "
-rm -f delete_me
-sync
+
+if (( test_run == 0 )); then
+  pv -tpreb /dev/zero | dd of=delete_me 
+  echo "Done at writing $(date)"
+  sync
+  echo "Delete dummy file "
+  rm -f delete_me
+  sync
+fi
 
 date=$(date +%Y%m%d)
 img_file="/mnt/usbstorage/backup/raspi/img-$date.gz"
@@ -33,4 +67,23 @@ echo
 echo "Press Enter to continue, or Ctrl+C to exit."
 read
 
-sudo dd if=/dev/mmcblk0 bs=1M | pv | gzip -c > "$img_file"
+if (( test_run == 0 )); then
+  sudo dd if=/dev/mmcblk0 bs=1M | pv | gzip -c > "$img_file"
+else
+  echo "test archive" | gzip -c > "$img_file"
+fi
+
+echo "Test zip..."
+
+if gzip -vlt "$img_file" ; then
+  echo "$img_file test succeded :)"
+  result=1
+else
+  echo "$img_file test failed :("
+  result=0
+fi
+
+touch -d "$tmpModTime" PREVENT_SHUTDOWN
+
+echo "Backup ended. "
+exit $result
