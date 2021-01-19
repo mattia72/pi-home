@@ -4,7 +4,7 @@ log_to_file()
   local msg_level="$1"
   local message="$2"
 
-  [ $log_level -ge $msg_level ] && echo -e "`date +'%x %X'`: $message" >> $log_file
+  [ $log_level -ge $msg_level ] && echo -e "$(date +"%y.%m.%d %X"): $message" >> $log_file
 }
 
 log_to_screen()

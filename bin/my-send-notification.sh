@@ -17,6 +17,7 @@ usage()
 
   Sends POST web request to
   https://maker.ifttt.com/trigger/<event>/with/key/<key>
+  (key can be read at https://ifttt.com/maker_webhooks/settings)
 
   Options:
        -h         Display this help and exit

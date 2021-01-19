@@ -1,3 +1,0 @@
-pulseaudio --start
-echo -e "power on\nconnect 5A:5A:5A:A6:0C:32 \nquit" | bluetoothctl
-sudo systemctl restart kodi
